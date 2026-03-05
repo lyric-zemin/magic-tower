@@ -1,73 +1,93 @@
-# React + TypeScript + Vite
+# 文字版魔塔游戏
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+这是一个基于 React + TypeScript + Vite 开发的文字版魔塔游戏。玩家需要在不同房间之间移动，与怪物战斗，收集物品，最终到达终点。
 
-Currently, two official plugins are available:
+## 项目结构
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```
+src/
+  ├── components/         # 游戏组件
+  │   ├── Controls.tsx    # 移动控制组件
+  │   ├── Game.tsx        # 游戏主组件
+  │   ├── ItemList.tsx    # 物品列表组件
+  │   ├── MonsterList.tsx # 怪物列表组件
+  │   ├── PlayerStats.tsx # 玩家状态组件
+  │   └── RoomDescription.tsx # 房间描述组件
+  ├── data/              # 游戏数据
+  │   └── gameData.ts    # 游戏房间和初始玩家数据
+  ├── hooks/             # 自定义钩子
+  │   └── useGameState.ts # 游戏状态管理
+  ├── types/             # 类型定义
+  │   └── index.ts       # 游戏相关类型定义
+  ├── App.tsx            # 应用入口
+  ├── main.tsx           # 主入口
+  └── index.css          # 全局样式
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## 游戏玩法
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+1. **移动系统**：
+   - 玩家可以通过方向键（上、下、左、右）在房间之间移动
+   - 离开房间前必须击败当前房间的所有怪物
+   - 某些房间需要钥匙才能进入
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+2. **战斗系统**：
+   - 玩家可以与房间中的怪物战斗
+   - 战斗采用回合制，玩家和怪物轮流攻击
+   - 战斗结果取决于双方的攻击力和防御力
+   - 击败怪物后玩家获得经验值和金币
+
+3. **物品系统**：
+   - 玩家可以拾取房间中的物品
+   - 物品包括：药水（恢复生命值）、钥匙（打开锁定房间）、武器（增加攻击力）、防具（增加防御力）
+
+4. **升级系统**：
+   - 玩家获得足够经验值后会自动升级
+   - 升级后玩家的生命值、攻击力和防御力会提升
+
+5. **胜利条件**：
+   - 玩家到达最终房间（room6）即获得胜利
+
+6. **游戏状态**：
+   - 游戏状态会自动保存到本地存储
+   - 玩家可以随时重新开始游戏
+
+## 技术栈
+
+- React 18
+- TypeScript
+- Vite
+- Tailwind CSS
+
+## 安装和运行
+
+1. 克隆项目：
+   ```bash
+   git clone <repository-url>
+   cd vibe-coding-learn
+   ```
+
+2. 安装依赖：
+   ```bash
+   pnpm install
+   ```
+
+3. 启动开发服务器：
+   ```bash
+   pnpm dev
+   ```
+
+4. 构建生产版本：
+   ```bash
+   pnpm build
+   ```
+
+## 游戏特色
+
+- 简洁的文字界面
+- 完整的游戏机制
+- 自动保存功能
+- 响应式设计，支持不同设备
+- 流畅的动画效果
+
+## 游戏截图
