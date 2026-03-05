@@ -64,7 +64,7 @@ src/
 1. 克隆项目：
    ```bash
    git clone <repository-url>
-   cd vibe-coding-learn
+   cd magic-tower
    ```
 
 2. 安装依赖：
