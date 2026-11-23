@@ -1,54 +1,72 @@
 import React from 'react';
 import type { Player } from '../types/index';
+import { expToNext } from '../game/progression';
 
 interface PlayerStatsProps {
   player: Player;
 }
 
+const Stat: React.FC<{ label: string; value: string | number; accent: string; icon: string }> = ({ label, value, accent, icon }) => (
+  <div className="flex items-center justify-between rounded-lg bg-white/5 px-3 py-2 ring-1 ring-white/5">
+    <span className="flex items-center gap-2 text-xs text-slate-400">
+      <span aria-hidden>{icon}</span>{label}
+    </span>
+    <span className="font-mono text-sm font-semibold" style={{ color: accent }}>{value}</span>
+  </div>
+);
+
 const PlayerStats: React.FC<PlayerStatsProps> = ({ player }) => {
+  const hpPercent = Math.max(0, (player.hp / player.maxHp) * 100);
+  const expNeeded = expToNext(player.level);
+  const expPercent = Math.min(100, (player.exp / expNeeded) * 100);
+
   return (
-    <div className="space-y-3">
-      <h2 className="text-xl font-bold border-b border-gray-700 pb-2 text-center text-blue-300">玩家状态</h2>
-      <div className="space-y-3">
-        <div className="flex justify-between items-center">
-          <span className="text-gray-300">等级:</span>
-          <span className="font-bold text-yellow-400">{player.level}</span>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-[11px] uppercase tracking-[0.25em] text-violet-300/70">冒险者</p>
+          <h2 className="font-serif text-2xl font-bold text-white">旅人档案</h2>
         </div>
-        <div className="flex justify-between items-center">
-          <span className="text-gray-300">生命值:</span>
-          <span className="font-bold text-red-400">{player.hp}/{player.maxHp}</span>
+        <div className="grid h-12 w-12 place-items-center rounded-xl bg-gradient-to-br from-violet-500 to-indigo-700 font-serif text-xl font-bold shadow-lg shadow-violet-900/40">
+          {player.level}
         </div>
-        <div className="w-full bg-gray-700 rounded-full h-2.5 overflow-hidden">
-          <div 
-            className="bg-red-500 h-2.5 rounded-full transition-all duration-500 ease-out" 
-            style={{ width: `${(player.hp / player.maxHp) * 100}%` }}
-          ></div>
+      </div>
+
+      <div className="space-y-1.5">
+        <div className="flex justify-between text-xs">
+          <span className="text-slate-400">生命</span>
+          <span className="font-mono text-rose-300">{player.hp} / {player.maxHp}</span>
         </div>
-        <div className="flex justify-between items-center">
-          <span className="text-gray-300">攻击力:</span>
-          <span className="font-bold text-green-400">{player.attack}</span>
+        <div className="h-2.5 overflow-hidden rounded-full bg-slate-900/80 ring-1 ring-white/10">
+          <div className="h-full rounded-full bg-gradient-to-r from-rose-600 via-rose-400 to-red-300 transition-all duration-500"
+            style={{ width: `${hpPercent}%` }} />
         </div>
-        <div className="flex justify-between items-center">
-          <span className="text-gray-300">防御力:</span>
-          <span className="font-bold text-blue-400">{player.defense}</span>
+        <div className="flex justify-between text-xs">
+          <span className="text-slate-400">经验</span>
+          <span className="font-mono text-cyan-300">{player.exp} / {expNeeded}</span>
         </div>
-        <div className="flex justify-between items-center">
-          <span className="text-gray-300">金币:</span>
-          <span className="font-bold text-yellow-300">{player.gold}</span>
+        <div className="h-2 overflow-hidden rounded-full bg-slate-900/80 ring-1 ring-white/10">
+          <div className="h-full rounded-full bg-gradient-to-r from-cyan-600 to-sky-300 transition-all duration-500"
+            style={{ width: `${expPercent}%` }} />
         </div>
-        <div className="flex justify-between items-center">
-          <span className="text-gray-300">钥匙:</span>
-          <span className="font-bold text-purple-400">{player.keys}</span>
-        </div>
-        <div className="flex justify-between items-center">
-          <span className="text-gray-300">经验值:</span>
-          <span className="font-bold text-cyan-400">{player.exp}/{player.level * 100}</span>
-        </div>
-        <div className="w-full bg-gray-700 rounded-full h-2.5 overflow-hidden">
-          <div 
-            className="bg-blue-500 h-2.5 rounded-full transition-all duration-500 ease-out" 
-            style={{ width: `${(player.exp / (player.level * 100)) * 100}%` }}
-          ></div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <Stat label="攻击" value={player.attack} accent="#FCA5A5" icon="⚔️" />
+        <Stat label="防御" value={player.defense} accent="#93C5FD" icon="🛡️" />
+        <Stat label="金币" value={player.gold} accent="#FCD34D" icon="💰" />
+        <Stat label="钥匙" value={player.keys} accent="#D8B4FE" icon="🗝️" />
+      </div>
+
+      <div>
+        <p className="mb-2 text-[11px] uppercase tracking-[0.2em] text-slate-500">已装备遗物</p>
+        <div className="flex flex-wrap gap-2">
+          {player.relics.length === 0 && <span className="text-xs text-slate-600">暂无遗物</span>}
+          {player.relics.map(relic => (
+            <span key={relic} className="rounded-full border border-violet-400/30 bg-violet-500/10 px-2.5 py-1 text-[11px] text-violet-200">
+              {{ critRing: '鹰眼戒指', vampireRing: '血契戒指', boots: '疾风之靴' }[relic] ?? relic}
+            </span>
+          ))}
         </div>
       </div>
     </div>

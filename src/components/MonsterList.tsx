@@ -1,67 +1,110 @@
 import React from 'react';
-import type { Monster } from '../types/index';
+import type { BattlePreview, Monster, MonsterTrait } from '../types/index';
+import { previewBattle } from '../game/battle';
+import type { Player } from '../types/index';
 
 interface MonsterListProps {
   monsters: Monster[];
+  player: Player;
   onFight: (monsterId: string) => void;
+  onFlee: (monsterId: string) => void;
 }
 
-const MonsterList: React.FC<MonsterListProps> = ({ monsters, onFight }) => {
+const traitNames: Record<MonsterTrait, string> = {
+  poison: '剧毒', doubleStrike: '连击', lifesteal: '吸血', armored: '重甲',
+  berserk: '狂暴', curse: '诅咒', split: '分裂', critical: '爆发', bossPhase: '二阶段'
+};
+
+const elementColors: Record<string, string> = {
+  none: '#94A3B8', fire: '#FB923C', ice: '#7DD3FC', thunder: '#FACC15', poison: '#4ADE80', dark: '#C084FC'
+};
+
+const Preview: React.FC<{ preview: BattlePreview; compact: boolean }> = ({ preview, compact }) => (
+  <div className={`mt-2 rounded-lg border border-white/5 bg-slate-950/40 text-[11px] ${compact ? 'p-2' : 'p-3'}`}>
+    <div className="flex flex-wrap gap-x-3 gap-y-1 text-slate-400">
+      <span>每击 <b className="font-mono text-rose-300">{preview.playerDamage}</b></span>
+      <span>预计 <b className="font-mono text-amber-300">{preview.rounds}</b> 回合</span>
+      <span>损失 <b className="font-mono text-red-300">{preview.hpLoss}</b> 生命</span>
+    </div>
+    <p className={`mt-1 font-semibold ${preview.willWin ? 'text-emerald-400' : 'text-red-400'}`}>
+      {preview.willWin ? '可击败，做好补给准备' : '危险！当前生命不足以支撑'}
+    </p>
+  </div>
+);
+
+const MonsterList: React.FC<MonsterListProps> = ({ monsters, player, onFight, onFlee }) => {
   if (monsters.length === 0) {
     return (
-      <div className="bg-gray-800 rounded-lg p-4 shadow-lg border border-gray-700 transition-all duration-300 hover:shadow-blue-500/20">
-        <h2 className="text-xl font-bold mb-2 text-red-400">怪物</h2>
-        <p className="text-gray-400">当前房间没有怪物</p>
+      <div className="glass-panel p-4">
+        <h2 className="panel-title">遭遇</h2>
+        <p className="mt-2 text-sm text-slate-500">此处暂时安全，继续探索吧。</p>
       </div>
     );
   }
 
   return (
-    <div className="bg-gray-800 rounded-lg p-4 shadow-lg border border-gray-700 transition-all duration-300 hover:shadow-blue-500/20">
-      <h2 className="text-xl font-bold mb-3 text-red-400">怪物</h2>
-      <div className="space-y-3">
-        {monsters.map(monster => (
-          <div key={monster.id} className="bg-gray-700 rounded-lg p-3 border border-gray-600 transition-all duration-300 hover:border-red-500/50 hover:shadow-red-500/10">
-            <div className="flex justify-between items-center">
-              <h3 className="font-bold text-red-300">{monster.name}</h3>
-              <button
-                className="px-3 py-1 bg-red-600 rounded hover:bg-red-700 transition-all duration-300 transform hover:scale-105"
-                onClick={() => onFight(monster.id)}
-              >
-                战斗
-              </button>
+    <div className="glass-panel space-y-3 p-4">
+      <div className="flex items-center justify-between">
+        <h2 className="panel-title text-rose-300">遭遇 · {monsters.length}</h2>
+        <span className="text-[11px] text-slate-500">点击战斗查看逐回合记录</span>
+      </div>
+      {monsters.map(monster => {
+        const preview = previewBattle(player, monster);
+        const isBoss = monster.traits.includes('bossPhase') || monster.threat >= 5;
+        return (
+          <div key={monster.id}
+            className={`rounded-xl p-3 ring-1 transition-all duration-300 ${isBoss
+              ? 'border border-amber-400/40 bg-amber-500/5 shadow-[0_0_24px_rgba(251,191,36,0.12)]'
+              : 'bg-white/[0.04] ring-white/5 hover:ring-rose-400/30'}`}>
+            <div className="flex items-start gap-3">
+              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl text-2xl"
+                style={{ backgroundColor: `${elementColors[monster.element]}1f`, border: `1px solid ${elementColors[monster.element]}55` }}>
+                {monster.icon}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="truncate font-serif text-lg font-semibold text-slate-100">{monster.name}</h3>
+                  {isBoss && <span className="rounded bg-amber-400/20 px-1.5 py-0.5 text-[10px] text-amber-300">首领</span>}
+                  <span className="text-[10px] text-slate-500" style={{ color: elementColors[monster.element] }}>
+                    {{ none: '无属性', fire: '火', ice: '冰', thunder: '雷', poison: '毒', dark: '暗' }[monster.element]}
+                  </span>
+                </div>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {monster.traits.map(trait => (
+                    <span key={trait} className="rounded bg-rose-500/10 px-1.5 py-0.5 text-[10px] text-rose-300/90">{traitNames[trait]}</span>
+                  ))}
+                  {monster.phase >= 2 && <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] text-amber-300">狂暴</span>}
+                </div>
+                <div className="mt-2 flex items-center gap-2">
+                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-900">
+                    <div className="h-full rounded-full bg-gradient-to-r from-rose-700 to-rose-400 transition-all duration-500"
+                      style={{ width: `${(monster.hp / monster.maxHp) * 100}%` }} />
+                  </div>
+                  <span className="font-mono text-[11px] text-rose-300">{monster.hp}/{monster.maxHp}</span>
+                </div>
+                <div className="mt-1 flex gap-3 text-[11px] text-slate-400">
+                  <span>攻 <b className="font-mono text-orange-300">{monster.attack}</b></span>
+                  <span>防 <b className="font-mono text-sky-300">{monster.defense}</b></span>
+                  <span>经验 <b className="font-mono text-cyan-300">{monster.exp}</b></span>
+                  <span>金币 <b className="font-mono text-amber-300">{monster.gold}</b></span>
+                </div>
+              </div>
             </div>
-            <div className="mt-2 space-y-1 text-sm">
-              <div className="flex justify-between">
-                <span className="text-gray-300">生命值:</span>
-                <span className="text-red-400 font-medium">{monster.hp}/{monster.maxHp}</span>
-              </div>
-              <div className="w-full bg-gray-600 rounded-full h-1.5 overflow-hidden">
-                <div 
-                  className="bg-green-500 h-1.5 rounded-full transition-all duration-500 ease-out" 
-                  style={{ width: `${(monster.hp / monster.maxHp) * 100}%` }}
-                ></div>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-300">攻击力:</span>
-                <span className="text-orange-400 font-medium">{monster.attack}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-300">防御力:</span>
-                <span className="text-blue-400 font-medium">{monster.defense}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-300">经验值:</span>
-                <span className="text-cyan-400 font-medium">{monster.exp}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-300">金币:</span>
-                <span className="text-yellow-400 font-medium">{monster.gold}</span>
-              </div>
+            <Preview preview={preview} compact />
+            <div className="mt-2 flex gap-2">
+              <button className="action-button flex-1 bg-gradient-to-r from-rose-600 to-red-500 hover:from-rose-500 hover:to-red-400"
+                onClick={() => onFight(monster.id)}>
+                交战
+              </button>
+              {player.relics.includes('boots') && (
+                <button className="action-button bg-slate-700/70 hover:bg-slate-600" onClick={() => onFlee(monster.id)}>
+                  逃跑
+                </button>
+              )}
             </div>
           </div>
-        ))}
-      </div>
+        );
+      })}
     </div>
   );
 };

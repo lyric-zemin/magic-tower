@@ -1,236 +1,273 @@
-import React from 'react';
-import type { Player, Room } from '../types/index';
+import React, { useEffect, useRef, useState } from 'react';
+import type { Direction, ItemType, Room } from '../types/index';
 import { useGameState } from '../hooks/useGameState';
+import { FLOOR_NAMES } from '../data/gameData';
+import { monsterById } from '../data/monsters';
+import { makeBattleLog } from '../game/log';
+import { resolveBattle, fleeBattle } from '../game/battle';
+import { applyItem, canAfford, purchasePrice } from '../game/items';
 import PlayerStats from './PlayerStats';
 import RoomDescription from './RoomDescription';
 import MonsterList from './MonsterList';
 import ItemList from './ItemList';
 import Controls from './Controls';
+import MiniMap from './MiniMap';
+import BattleLog from './BattleLog';
+import Shop from './Shop';
+import Bestiary from './Bestiary';
+import Toast from './Toast';
 
 const Game: React.FC = () => {
-  // 使用自定义hook管理游戏状态
-  const { gameState, setGameState, resetGame } = useGameState();
+  const { gameState, setGameState, resetGame, toast, notify, dismissToast, appendLog } = useGameState();
+  const [shopOpen, setShopOpen] = useState(false);
+  const [bestiaryOpen, setBestiaryOpen] = useState(false);
 
-  // 获取当前房间
   const currentRoom: Room = gameState.rooms[gameState.currentRoomId];
+  const floorRooms = Object.values(gameState.rooms).filter(room => room.floor === currentRoom.floor);
 
-  // 处理玩家移动
-  const handleMove = (direction: 'north' | 'south' | 'east' | 'west') => {
+  const explore = (ids: string[], roomId: string) => ids.includes(roomId) ? ids : [...ids, roomId];
+
+  const handleMove = (direction: Direction) => {
     if (gameState.gameOver) return;
-
-    const nextRoomId = currentRoom.exits[direction];
-    if (nextRoomId) {
-      // 检查当前房间是否还有怪物
-      if (currentRoom.monsters.length > 0) {
-        alert('你需要击败当前房间的所有怪物才能离开！');
-        return;
-      }
-
-      const nextRoom = gameState.rooms[nextRoomId];
-      
-      // 检查是否需要钥匙
-      if (nextRoom.requiresKey) {
-        // 检查玩家是否有钥匙
-        if (gameState.player.keys > 0) {
-          // 消耗一把钥匙并进入房间
-          setGameState(prev => ({
-            ...prev,
-            currentRoomId: nextRoomId,
-            player: {
-              ...prev.player,
-              keys: prev.player.keys - 1, // 消耗一把钥匙
-              position: { x: 1, y: 1 } // 重置玩家位置到新房间的起点
-            }
-          }));
-        } else {
-          // 没有钥匙，不允许进入
-          alert('你需要一把钥匙才能进入这个房间！');
-          return;
-        }
-      } else {
-        // 不需要钥匙，直接进入
-        setGameState(prev => ({
-          ...prev,
-          currentRoomId: nextRoomId,
-          player: {
-            ...prev.player,
-            position: { x: 1, y: 1 } // 重置玩家位置到新房间的起点
-          }
-        }));
-      }
+    if (currentRoom.monsters.length > 0) {
+      notify('击败当前房间的所有怪物后才能离开。', 'danger');
+      return;
     }
+    const nextId = currentRoom.exits[direction];
+    if (!nextId) return;
+    const nextRoom = gameState.rooms[nextId];
+    if (nextRoom.requiresKey && gameState.player.keys <= 0) {
+      notify('这扇门需要一把钥匙。', 'danger');
+      return;
+    }
+    setGameState(prev => ({
+      ...prev,
+      currentRoomId: nextId,
+      exploredRoomIds: explore(prev.exploredRoomIds, nextId),
+      player: { ...prev.player, keys: nextRoom.requiresKey ? prev.player.keys - 1 : prev.player.keys }
+    }));
+    notify(`进入 ${nextRoom.name}`);
   };
 
-  // 处理战斗
   const handleFight = (monsterId: string) => {
     if (gameState.gameOver) return;
-
-    const monster = currentRoom.monsters.find(m => m.id === monsterId);
+    const monster = currentRoom.monsters.find(item => item.id === monsterId);
     if (!monster) return;
+    const outcome = resolveBattle(gameState.player, monster);
+    const remaining = currentRoom.monsters.filter(item => item.id !== monsterId).concat(outcome.splitSpawn);
+    const unlocked = outcome.defeated && monsterById[monster.id]
+      ? Array.from(new Set([...gameState.bestiary, monster.id]))
+      : gameState.bestiary;
+    const won = outcome.defeated && currentRoom.kind === 'victory' && remaining.length === 0;
 
-    // 战斗逻辑
-    let playerHp = gameState.player.hp;
-    let monsterHp = monster.hp;
-
-    // 计算伤害
-    const playerDamage = Math.max(1, gameState.player.attack - monster.defense);
-    const monsterDamage = Math.max(1, monster.attack - gameState.player.defense);
-
-    // 战斗循环
-    while (playerHp > 0 && monsterHp > 0) {
-      // 玩家攻击
-      monsterHp -= playerDamage;
-      if (monsterHp <= 0) break;
-
-      // 怪物攻击
-      playerHp -= monsterDamage;
-    }
-
-    if (playerHp <= 0) {
-      // 玩家死亡
-      setGameState(prev => ({
-        ...prev,
-        gameOver: true,
-        victory: false
-      }));
-    } else {
-      // 怪物死亡，更新游戏状态
-      const updatedRooms = {
-        ...gameState.rooms,
-        [gameState.currentRoomId]: {
-          ...currentRoom,
-          monsters: currentRoom.monsters.filter(m => m.id !== monsterId)
-        }
-      };
-
-      const updatedPlayer = {
-        ...gameState.player,
-        hp: playerHp,
-        exp: gameState.player.exp + monster.exp,
-        gold: gameState.player.gold + monster.gold
-      };
-
-      // 检查是否升级
-      const updatedPlayerAfterLevelUp = checkLevelUp(updatedPlayer);
-
-      setGameState(prev => ({
-        ...prev,
-        rooms: updatedRooms,
-        player: updatedPlayerAfterLevelUp
-      }));
-    }
+    appendLog(outcome.log);
+    setGameState(prev => ({
+      ...prev,
+      rooms: { ...prev.rooms, [prev.currentRoomId]: { ...currentRoom, monsters: remaining } },
+      player: outcome.player,
+      bestiary: unlocked,
+      gameOver: outcome.player.hp <= 0 || won,
+      victory: won
+    }));
+    notify(outcome.defeated ? `击败 ${monster.name}！` : '你受伤了，先撤退补给吧。', outcome.defeated ? 'success' : 'danger');
   };
 
-  // 检查升级
-  const checkLevelUp = (player: Player): Player => {
-    const expNeeded = player.level * 100;
-    if (player.exp >= expNeeded) {
-      return {
-        ...player,
-        level: player.level + 1,
-        exp: player.exp - expNeeded,
-        maxHp: player.maxHp + 10,
-        hp: player.maxHp + 10,
-        attack: player.attack + 2,
-        defense: player.defense + 1
-      };
-    }
-    return player;
+  const handleFlee = (monsterId: string) => {
+    const monster = currentRoom.monsters.find(item => item.id === monsterId);
+    if (!monster) return;
+    const outcome = fleeBattle(gameState.player, monster);
+    appendLog(outcome.log);
+    setGameState(prev => ({ ...prev, player: outcome.player }));
+    notify('成功脱离战斗。');
   };
 
-  // 处理拾取物品
   const handlePickup = (itemId: string) => {
-    if (gameState.gameOver) return;
-
-    const item = currentRoom.items.find(i => i.id === itemId);
+    const item = currentRoom.items.find(entry => entry.id === itemId);
     if (!item) return;
+    const result = applyItem(gameState.player, item.type);
+    let monsters = currentRoom.monsters;
+    let bestiary = gameState.bestiary;
+    let currentRoomId = gameState.currentRoomId;
+    let exploredRoomIds = gameState.exploredRoomIds;
 
-    const updatedPlayer = { ...gameState.player };
-
-    // 处理不同类型的物品
-    switch (item.type) {
-      case 'potion':
-        updatedPlayer.hp = Math.min(updatedPlayer.maxHp, updatedPlayer.hp + item.effect);
-        break;
-      case 'key':
-        updatedPlayer.keys += item.effect;
-        break;
-      case 'sword':
-        updatedPlayer.attack += item.effect;
-        break;
-      case 'shield':
-      case 'armor':
-        updatedPlayer.defense += item.effect;
-        break;
+    if (result.bombDamage > 0) {
+      monsters = monsters
+        .map(monster => ({ ...monster, hp: Math.max(0, monster.hp - result.bombDamage) }))
+        .filter(monster => {
+          if (monster.hp > 0) return true;
+          if (monsterById[monster.id]) bestiary = Array.from(new Set([...bestiary, monster.id]));
+          return false;
+        });
+      appendLog([makeBattleLog(0, result.message, 'loot')]);
+    } else {
+      appendLog([makeBattleLog(0, `拾取 ${item.name}：${result.message}`, 'loot')]);
     }
 
-    // 更新房间物品
-    const updatedRooms = {
-      ...gameState.rooms,
-      [gameState.currentRoomId]: {
-        ...currentRoom,
-        items: currentRoom.items.filter(i => i.id !== itemId)
+    if (result.teleport) {
+      const entrance = floorRooms.find(room => room.kind === 'start');
+      if (entrance) {
+        currentRoomId = entrance.id;
+        exploredRoomIds = explore(exploredRoomIds, entrance.id);
       }
-    };
+    }
 
     setGameState(prev => ({
       ...prev,
-      rooms: updatedRooms,
-      player: updatedPlayer
+      currentRoomId,
+      exploredRoomIds,
+      bestiary,
+      player: result.player,
+      rooms: {
+        ...prev.rooms,
+        [gameState.currentRoomId]: {
+          ...prev.rooms[gameState.currentRoomId],
+          items: prev.rooms[gameState.currentRoomId].items.filter(entry => entry.id !== itemId),
+          monsters
+        }
+      }
     }));
+    notify(result.message, item.type === 'cursedPotion' ? 'danger' : 'success');
   };
 
-  // 检查是否到达终点
-  if (gameState.currentRoomId === 'room6' && !gameState.gameOver) {
+  const handleBuy = (type: ItemType) => {
+    if (!canAfford(gameState.player, type)) {
+      notify('金币不足。', 'danger');
+      return;
+    }
+    const result = applyItem(gameState.player, type);
+    const stock = [...(currentRoom.shopStock ?? [])];
+    const index = stock.indexOf(type);
+    if (index >= 0) stock.splice(index, 1);
     setGameState(prev => ({
       ...prev,
-      gameOver: true,
-      victory: true
+      player: { ...result.player, gold: result.player.gold - purchasePrice(type) },
+      rooms: {
+        ...prev.rooms,
+        [prev.currentRoomId]: { ...prev.rooms[prev.currentRoomId], shopStock: stock }
+      }
     }));
-  }
+    notify(`购买成功：${result.message}`, 'success');
+  };
+
+  const handlersRef = useRef({ handleMove, handleFight, handlePickup });
+  useEffect(() => {
+    handlersRef.current = { handleMove, handleFight, handlePickup };
+  });
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (shopOpen || bestiaryOpen || gameState.gameOver) return;
+      const keyMap: Record<string, Direction> = {
+        ArrowUp: 'north', w: 'north', W: 'north', ArrowDown: 'south', s: 'south', S: 'south',
+        ArrowLeft: 'west', a: 'west', A: 'west', ArrowRight: 'east', d: 'east', D: 'east',
+        q: 'up', Q: 'up', e: 'down', E: 'down'
+      };
+      const direction = keyMap[event.key];
+      if (direction) {
+        event.preventDefault();
+        handlersRef.current.handleMove(direction);
+        return;
+      }
+      if (event.key === 'f' || event.key === 'F') {
+        if (currentRoom.monsters[0]) handlersRef.current.handleFight(currentRoom.monsters[0].id);
+      }
+      if (event.key === 'r' || event.key === 'R') {
+        if (currentRoom.items[0]) handlersRef.current.handlePickup(currentRoom.items[0].id);
+      }
+      if (event.key === 'b' || event.key === 'B') setShopOpen(value => !value);
+      if (event.key === 'c' || event.key === 'C') setBestiaryOpen(value => !value);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [shopOpen, bestiaryOpen, gameState.gameOver, currentRoom]);
+
+  const blocked = currentRoom.monsters.length > 0;
 
   return (
-    <div className="flex flex-col items-center min-h-screen bg-gray-900 text-white p-4">
-      <h1 className="text-4xl font-bold mb-6 text-center text-blue-400 drop-shadow-lg">文字版魔塔游戏</h1>
+    <div className="app-shell min-h-dvh text-slate-100">
+      <header className="sticky top-0 z-20 border-b border-violet-400/15 bg-[#0B0E1A]/85 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-3 px-4 py-3">
+          <div className="flex items-center gap-3">
+            <span className="grid h-9 w-9 place-items-center rounded-lg bg-gradient-to-br from-violet-500 to-indigo-700 text-lg shadow-lg shadow-violet-900/40">♜</span>
+            <div>
+              <h1 className="font-serif text-lg font-bold tracking-wide text-transparent bg-clip-text bg-gradient-to-r from-violet-300 via-fuchsia-200 to-indigo-300 sm:text-2xl">
+                暗影之塔<span className="hidden sm:inline"> · 魔塔远征</span>
+              </h1>
+              <p className="hidden text-[10px] uppercase tracking-[0.3em] text-slate-500 sm:block">Shadow Tower Chronicle</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="hidden rounded-full border border-violet-400/30 px-3 py-1 text-xs text-violet-200 sm:inline">
+              {currentRoom.floor} 层 · {FLOOR_NAMES[currentRoom.floor]}
+            </span>
+            <button onClick={() => setBestiaryOpen(true)} className="header-button">图鉴 <kbd>C</kbd></button>
+            <button onClick={resetGame} className="header-button">重开</button>
+          </div>
+        </div>
+      </header>
 
-      {/* 游戏结束或胜利 */}
+      <main className="mx-auto max-w-[1500px] px-3 pb-28 pt-4 md:px-5 md:pb-8">
+        <div className="grid gap-4 lg:grid-cols-[270px_minmax(0,1fr)_250px] md:grid-cols-[240px_minmax(0,1fr)]">
+          <aside className="glass-panel h-fit p-4 md:sticky md:top-20">
+            <PlayerStats player={gameState.player} />
+          </aside>
+
+          <section className="min-w-0 space-y-4">
+            <RoomDescription room={currentRoom} canLeave={!blocked} />
+            <MonsterList monsters={currentRoom.monsters} player={gameState.player} onFight={handleFight} onFlee={handleFlee} />
+            <ItemList items={currentRoom.items} onPickup={handlePickup} />
+            <div className="hidden md:block">
+              <Controls exits={currentRoom.exits} onMove={handleMove} blocked={blocked} />
+            </div>
+            <BattleLog entries={gameState.battleLog} />
+          </section>
+
+          <aside className="hidden space-y-4 lg:block">
+            <MiniMap rooms={floorRooms} currentRoomId={currentRoom.id} explored={gameState.exploredRoomIds} />
+            <div className="glass-panel space-y-2 p-4">
+              <button onClick={() => setShopOpen(true)} disabled={!currentRoom.shopStock} className="action-button w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40">
+                打开商店 <kbd>B</kbd>
+              </button>
+              <p className="text-[11px] leading-relaxed text-slate-500">战斗快捷键 F · 拾取快捷键 R · 移动方向键或 WASD</p>
+            </div>
+          </aside>
+        </div>
+
+        <div className="mt-4 lg:hidden">
+          <MiniMap rooms={floorRooms} currentRoomId={currentRoom.id} explored={gameState.exploredRoomIds} />
+          {currentRoom.shopStock && (
+            <button onClick={() => setShopOpen(true)} className="action-button mt-3 w-full bg-gradient-to-r from-amber-500 to-orange-500">打开商店</button>
+          )}
+        </div>
+      </main>
+
+      <Controls exits={currentRoom.exits} onMove={handleMove} blocked={blocked} dock />
+
+      {shopOpen && currentRoom.shopStock && (
+        <Shop stock={currentRoom.shopStock} player={gameState.player} onBuy={handleBuy} onClose={() => setShopOpen(false)} />
+      )}
+      {bestiaryOpen && <Bestiary unlocked={gameState.bestiary} onClose={() => setBestiaryOpen(false)} />}
+      <Toast toast={toast} onDismiss={dismissToast} />
+
       {gameState.gameOver && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black bg-opacity-80 z-50 p-4 animate-fade-in">
-          <h2 className={`text-4xl font-bold mb-4 ${gameState.victory ? 'text-green-400' : 'text-red-400'} animate-pulse`}>
-            {gameState.victory ? '恭喜你获胜了！' : '游戏结束'}
-          </h2>
-          <button 
-            className="px-6 py-2 bg-blue-600 rounded-lg hover:bg-blue-700 transition-all duration-300 transform hover:scale-105"
-            onClick={resetGame}
-          >
-            重新开始
-          </button>
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/80 p-4 backdrop-blur-md animate-[fadeIn_300ms_ease-out]">
+          <div className="modal-sheet w-full max-w-md p-8 text-center">
+            <p className="text-5xl">{gameState.victory ? '🏆' : '💀'}</p>
+            <h2 className={`mt-4 font-serif text-3xl font-bold ${gameState.victory ? 'text-amber-300' : 'text-red-400'}`}>
+              {gameState.victory ? '暗影之塔重归寂静' : '远征在此终结'}
+            </h2>
+            <p className="mt-3 text-sm text-slate-400">
+              {gameState.victory ? '你击败了塔顶守卫，带着传说归来。' : '塔中的黑暗吞噬了你的火把，但故事仍可重来。'}
+            </p>
+            <div className="mt-5 grid grid-cols-3 gap-2 text-center">
+              <div className="rounded-lg bg-white/5 p-2"><p className="font-mono text-lg text-violet-200">{gameState.player.level}</p><p className="text-[11px] text-slate-500">等级</p></div>
+              <div className="rounded-lg bg-white/5 p-2"><p className="font-mono text-lg text-cyan-200">{gameState.bestiary.length}</p><p className="text-[11px] text-slate-500">图鉴</p></div>
+              <div className="rounded-lg bg-white/5 p-2"><p className="font-mono text-lg text-amber-200">{gameState.player.gold}</p><p className="text-[11px] text-slate-500">金币</p></div>
+            </div>
+            <button onClick={resetGame} className="action-button mt-6 w-full bg-gradient-to-r from-violet-600 to-indigo-600 hover:brightness-110">再次远征</button>
+          </div>
         </div>
       )}
-
-      <div className="flex flex-col md:flex-row gap-6 w-full max-w-4xl animate-slide-up">
-        {/* 左侧：玩家状态 */}
-        <div className="w-full md:w-1/4 bg-gray-800 rounded-lg p-4 shadow-lg border border-gray-700 transition-all duration-300 hover:shadow-blue-500/20">
-          <PlayerStats player={gameState.player} />
-        </div>
-
-        {/* 右侧：游戏主区域 */}
-        <div className="w-full md:w-3/4 space-y-4">
-          <RoomDescription room={currentRoom} />
-          <MonsterList 
-            monsters={currentRoom.monsters} 
-            onFight={handleFight} 
-          />
-          <ItemList 
-            items={currentRoom.items} 
-            onPickup={handlePickup} 
-          />
-          <Controls 
-            exits={currentRoom.exits} 
-            onMove={handleMove} 
-          />
-        </div>
-      </div>
     </div>
   );
 };

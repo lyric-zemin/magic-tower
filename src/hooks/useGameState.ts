@@ -1,49 +1,47 @@
-import { useState, useEffect } from 'react';
-import type { GameState } from '../types/index';
-import { rooms, initialPlayer } from '../data/gameData';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { BattleLogEntry, GameState } from '../types/index';
+import { clearSave, createInitialState, loadGame, saveGame } from '../game/save';
 
-const GAME_STORAGE_KEY = 'text-based-tower-game';
+export interface ToastMessage {
+  id: number;
+  text: string;
+  tone: 'info' | 'success' | 'danger';
+}
+
+let toastSeq = 0;
 
 export const useGameState = () => {
-  // 初始化游戏状态，优先从本地存储加载
-  const [gameState, setGameState] = useState<GameState>(() => {
-    try {
-      const savedState = localStorage.getItem(GAME_STORAGE_KEY);
-      if (savedState) {
-        return JSON.parse(savedState);
-      }
-    } catch (error) {
-      console.error('Failed to load game state:', error);
-    }
-    // 初始状态
-    return {
-      player: initialPlayer,
-      currentRoomId: 'room1',
-      rooms: rooms,
-      gameOver: false,
-      victory: false
-    };
-  });
+  const initialRef = useRef(loadGame());
+  const [gameState, setGameState] = useState<GameState>(initialRef.current.state ?? createInitialState());
+  const [toast, setToast] = useState<ToastMessage | null>(null);
 
-  // 监听游戏状态变化，自动保存到本地存储
   useEffect(() => {
-    try {
-      localStorage.setItem(GAME_STORAGE_KEY, JSON.stringify(gameState));
-    } catch (error) {
-      console.error('Failed to save game state:', error);
+    if (initialRef.current.notice) {
+      setToast({ id: ++toastSeq, text: initialRef.current.notice, tone: 'info' });
+      initialRef.current.notice = null;
     }
+  }, []);
+
+  useEffect(() => {
+    saveGame(gameState);
   }, [gameState]);
 
-  // 重置游戏
-  const resetGame = () => {
-    setGameState({
-      player: initialPlayer,
-      currentRoomId: 'room1',
-      rooms: rooms,
-      gameOver: false,
-      victory: false
-    });
-  };
+  const notify = useCallback((text: string, tone: ToastMessage['tone'] = 'info') => {
+    setToast({ id: ++toastSeq, text, tone });
+  }, []);
 
-  return { gameState, setGameState, resetGame };
+  const dismissToast = useCallback(() => setToast(null), []);
+
+  const appendLog = useCallback((entries: BattleLogEntry[]) => {
+    if (entries.length === 0) return;
+    setGameState(prev => ({ ...prev, battleLog: [...prev.battleLog, ...entries].slice(-60) }));
+  }, []);
+
+  const resetGame = useCallback(() => {
+    clearSave();
+    setGameState(createInitialState());
+    setToast({ id: ++toastSeq, text: '新的冒险开始了。', tone: 'success' });
+  }, []);
+
+  return { gameState, setGameState, resetGame, toast, notify, dismissToast, appendLog };
 };
