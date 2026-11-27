@@ -1,7 +1,7 @@
 import React from 'react';
-import type { BattlePreview, Monster, MonsterTrait } from '../types/index';
+import type { BattlePreview, Monster, Player } from '../types/index';
+import { monsterElementLabels, monsterTraitNames } from '../data/monsters';
 import { previewBattle } from '../game/battle';
-import type { Player } from '../types/index';
 
 interface MonsterListProps {
   monsters: Monster[];
@@ -9,11 +9,6 @@ interface MonsterListProps {
   onFight: (monsterId: string) => void;
   onFlee: (monsterId: string) => void;
 }
-
-const traitNames: Record<MonsterTrait, string> = {
-  poison: '剧毒', doubleStrike: '连击', lifesteal: '吸血', armored: '重甲',
-  berserk: '狂暴', curse: '诅咒', split: '分裂', critical: '爆发', bossPhase: '二阶段'
-};
 
 const elementColors: Record<string, string> = {
   none: '#94A3B8', fire: '#FB923C', ice: '#7DD3FC', thunder: '#FACC15', poison: '#4ADE80', dark: '#C084FC'
@@ -66,12 +61,12 @@ const MonsterList: React.FC<MonsterListProps> = ({ monsters, player, onFight, on
                   <h3 className="truncate font-serif text-lg font-semibold text-slate-100">{monster.name}</h3>
                   {isBoss && <span className="rounded bg-amber-400/20 px-1.5 py-0.5 text-[10px] text-amber-300">首领</span>}
                   <span className="text-[10px] text-slate-500" style={{ color: elementColors[monster.element] }}>
-                    {{ none: '无属性', fire: '火', ice: '冰', thunder: '雷', poison: '毒', dark: '暗' }[monster.element]}
+                    {monsterElementLabels[monster.element]}
                   </span>
                 </div>
                 <div className="mt-1 flex flex-wrap gap-1">
                   {monster.traits.map(trait => (
-                    <span key={trait} className="rounded bg-rose-500/10 px-1.5 py-0.5 text-[10px] text-rose-300/90">{traitNames[trait]}</span>
+                    <span key={trait} className="rounded bg-rose-500/10 px-1.5 py-0.5 text-[10px] text-rose-300/90">{monsterTraitNames[trait]}</span>
                   ))}
                   {monster.phase >= 2 && <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] text-amber-300">狂暴</span>}
                 </div>
@@ -91,13 +86,19 @@ const MonsterList: React.FC<MonsterListProps> = ({ monsters, player, onFight, on
               </div>
             </div>
             <Preview preview={preview} compact />
+            {monster.traits.includes('split') && (
+              <p className="mt-1 text-[10px] text-slate-500">预览已包含分裂后的残影</p>
+            )}
             <div className="mt-2 flex gap-2">
               <button className="action-button flex-1 bg-gradient-to-r from-rose-600 to-red-500 hover:from-rose-500 hover:to-red-400"
                 onClick={() => onFight(monster.id)}>
                 交战
               </button>
               {player.relics.includes('boots') && (
-                <button className="action-button bg-slate-700/70 hover:bg-slate-600" onClick={() => onFlee(monster.id)}>
+                <button
+                  title="损失当前生命的 10%，可能导致失败"
+                  className="action-button bg-slate-700/70 hover:bg-slate-600"
+                  onClick={() => onFlee(monster.id)}>
                   逃跑
                 </button>
               )}

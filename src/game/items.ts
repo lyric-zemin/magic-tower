@@ -60,7 +60,38 @@ export const applyItem = (player: Player, type: ItemType): ItemApplication => {
   }
 };
 
+export interface ItemAvailability {
+  allowed: boolean;
+  reason?: string;
+}
+
+const healingTypes: ItemType[] = ['potion', 'hiPotion'];
+const relicTypes: ItemType[] = ['critRing', 'vampireRing', 'boots'];
+
+export const canPickupItem = (player: Player, type: ItemType, hasMonsters = false): ItemAvailability => {
+  if (healingTypes.includes(type) && player.hp >= player.maxHp) {
+    return { allowed: false, reason: '生命已满' };
+  }
+  if (relicTypes.includes(type) && player.relics.includes(type)) {
+    return { allowed: false, reason: '遗物已装备' };
+  }
+  if (type === 'bomb' && !hasMonsters) {
+    return { allowed: false, reason: '当前房间没有怪物' };
+  }
+  return { allowed: true };
+};
+
 export const purchasePrice = (type: ItemType): number => itemDefinitions[type].price;
+
+export const canBuyItem = (player: Player, type: ItemType): ItemAvailability => {
+  const price = purchasePrice(type);
+  if (price <= 0) return { allowed: false, reason: '此物无法购买' };
+  if (player.gold < price) return { allowed: false, reason: '金币不足' };
+  if (type === 'bomb') return { allowed: false, reason: '炸弹只对房间怪物生效' };
+  const pickup = canPickupItem(player, type, true);
+  if (!pickup.allowed) return pickup;
+  return { allowed: true };
+};
 
 export const canAfford = (player: Player, type: ItemType): boolean => {
   const price = purchasePrice(type);

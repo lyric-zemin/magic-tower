@@ -83,14 +83,14 @@ const roomConfigs: RoomConfig[] = [
     id: 'f2r2', floor: 2, name: '冰封回廊', kind: 'normal',
     description: '与熔岩仅一墙之隔，这里却凝结着永不消融的寒霜。',
     mapX: 1, mapY: 0,
-    monsters: [['iceElemental', 3, 2]], items: [['defenseGem', 4, 4]],
+    monsters: [['iceElemental', 3, 2], ['skeleton', 1, 4]], items: [['defenseGem', 4, 4]],
     exits: { west: 'f2r1', south: 'f2r4' }
   },
   {
     id: 'f2r3', floor: 2, name: '血蝠洞窟', kind: 'normal',
     description: '倒挂的蝠群在黑暗中闪烁着猩红的眼睛，一只戒指落在石台上。',
     mapX: 0, mapY: 1,
-    monsters: [['vampireBat', 2, 2], ['bat', 4, 3]], items: [['critRing', 1, 4]],
+    monsters: [['vampireBat', 2, 2], ['bat', 4, 3], ['slime', 3, 4]], items: [['critRing', 1, 4]],
     exits: { north: 'f2r1', east: 'f2r4' }
   },
   {
@@ -124,7 +124,7 @@ const roomConfigs: RoomConfig[] = [
     id: 'f3r2', floor: 3, name: '秘法书房', kind: 'treasure',
     description: '无数卷轴悬浮在半空，知识与力量的代价在此变得模糊。',
     mapX: 1, mapY: 0,
-    monsters: [], items: [['expScroll', 2, 2], ['teleportScroll', 4, 3], ['hpGem', 3, 4]],
+    monsters: [], items: [['expScroll', 2, 2], ['teleportScroll', 4, 3], ['hpGem', 3, 4], ['goldBag', 1, 3], ['cursedPotion', 5, 2]],
     exits: { west: 'f3r1', south: 'f3r4' }
   },
   {

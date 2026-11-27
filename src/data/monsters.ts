@@ -1,4 +1,13 @@
-import type { MonsterTemplate } from '../types/index';
+import type { MonsterElement, MonsterTemplate, MonsterTrait } from '../types/index';
+
+export const monsterTraitNames: Record<MonsterTrait, string> = {
+  poison: '剧毒', doubleStrike: '连击', lifesteal: '吸血', armored: '重甲',
+  berserk: '狂暴', curse: '诅咒', split: '分裂', critical: '爆发', bossPhase: '二阶段'
+};
+
+export const monsterElementLabels: Record<MonsterElement, string> = {
+  none: '无属性', fire: '火', ice: '冰', thunder: '雷', poison: '毒', dark: '暗'
+};
 
 export const monsterTemplates: MonsterTemplate[] = [
   { id: 'goblin', name: '哥布林斥候', icon: '👺', element: 'poison', traits: [], hp: 22, attack: 6, defense: 2, exp: 16, gold: 6, threat: 1, description: '游荡在底层走廊的掠食者，行动敏捷但缺乏章法。' },

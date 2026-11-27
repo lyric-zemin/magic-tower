@@ -1,7 +1,7 @@
 import React from 'react';
 import type { ItemType, Player } from '../types/index';
 import { itemDefinitions } from '../data/items';
-import { purchasePrice } from '../game/items';
+import { canBuyItem, purchasePrice } from '../game/items';
 
 interface ShopProps {
   stock: ItemType[];
@@ -29,19 +29,23 @@ const Shop: React.FC<ShopProps> = ({ stock, player, onBuy, onClose }) => {
           {stock.map((type, index) => {
             const def = itemDefinitions[type];
             const price = purchasePrice(type);
-            const affordable = player.gold >= price;
+            const availability = canBuyItem(player, type);
             return (
               <div key={`${type}-${index}`} className="flex min-w-0 items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] p-3">
                 <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-slate-950/60 text-xl">{def.icon}</span>
                 <div className="min-w-0 flex-1">
                   <h3 className="truncate text-sm font-semibold text-slate-100">{def.name}</h3>
                   <p className="truncate text-[11px] text-slate-400">{def.description}</p>
+                  {!availability.allowed && (
+                    <p className="mt-0.5 text-[10px] text-amber-300/80">{availability.reason}</p>
+                  )}
                 </div>
                 <button
-                  disabled={!affordable}
+                  disabled={!availability.allowed}
+                  title={availability.reason}
                   onClick={() => onBuy(type)}
                   className={`touch-manipulation min-h-[44px] rounded-lg px-3 text-xs font-semibold transition-all active:scale-95 ${
-                    affordable
+                    availability.allowed
                       ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 hover:brightness-110'
                       : 'cursor-not-allowed bg-white/5 text-slate-600'}`}
                 >

@@ -1,9 +1,9 @@
 import type { GameState } from '../types/index';
 import { buildInitialRooms, initialPlayer } from '../data/gameData';
 
-const SAVE_KEY = 'shadow-tower-save-v3';
-const LEGACY_SAVE_KEY = 'shadow-tower-save-v2';
-const SAVE_VERSION = 3;
+const SAVE_KEY = 'shadow-tower-save-v4';
+const LEGACY_SAVE_KEYS = ['shadow-tower-save-v3', 'shadow-tower-save-v2'];
+const SAVE_VERSION = 4;
 
 export interface LoadResult {
   state: GameState | null;
@@ -38,8 +38,9 @@ const isValidState = (value: unknown): value is GameState => {
 export const loadGame = (): LoadResult => {
   const raw = localStorage.getItem(SAVE_KEY);
   if (!raw) {
-    if (localStorage.getItem(LEGACY_SAVE_KEY)) {
-      localStorage.removeItem(LEGACY_SAVE_KEY);
+    const hasLegacy = LEGACY_SAVE_KEYS.some(key => localStorage.getItem(key));
+    LEGACY_SAVE_KEYS.forEach(key => localStorage.removeItem(key));
+    if (hasLegacy) {
       return { state: createInitialState(), notice: '存档版本已更新，游戏已重新开始。' };
     }
     return { state: createInitialState(), notice: null };
@@ -55,7 +56,7 @@ export const loadGame = (): LoadResult => {
   }
 
   localStorage.removeItem(SAVE_KEY);
-  localStorage.removeItem(LEGACY_SAVE_KEY);
+  LEGACY_SAVE_KEYS.forEach(key => localStorage.removeItem(key));
   return { state: createInitialState(), notice: '存档版本已更新，游戏已重新开始。' };
 };
 
@@ -67,4 +68,7 @@ export const saveGame = (state: GameState): void => {
   }
 };
 
-export const clearSave = (): void => localStorage.removeItem(SAVE_KEY);
+export const clearSave = (): void => {
+  localStorage.removeItem(SAVE_KEY);
+  LEGACY_SAVE_KEYS.forEach(key => localStorage.removeItem(key));
+};

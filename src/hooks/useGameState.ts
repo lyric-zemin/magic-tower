@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import type { BattleLogEntry, GameState } from '../types/index';
-import { clearSave, createInitialState, loadGame, saveGame } from '../game/save';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import { storeReducer, type GameStore } from '../game/reducer';
+import { createInitialState, loadGame, saveGame } from '../game/save';
 
 export interface ToastMessage {
   id: number;
@@ -12,19 +12,12 @@ let toastSeq = 0;
 
 export const useGameState = () => {
   const initialRef = useRef(loadGame());
-  const [gameState, setGameState] = useState<GameState>(initialRef.current.state ?? createInitialState());
+  const [store, dispatch] = useReducer(storeReducer, {
+    state: initialRef.current.state ?? createInitialState(),
+    feedback: null
+  } as GameStore);
   const [toast, setToast] = useState<ToastMessage | null>(null);
-
-  useEffect(() => {
-    if (initialRef.current.notice) {
-      setToast({ id: ++toastSeq, text: initialRef.current.notice, tone: 'info' });
-      initialRef.current.notice = null;
-    }
-  }, []);
-
-  useEffect(() => {
-    saveGame(gameState);
-  }, [gameState]);
+  const lastFeedbackId = useRef(0);
 
   const notify = useCallback((text: string, tone: ToastMessage['tone'] = 'info') => {
     setToast({ id: ++toastSeq, text, tone });
@@ -32,16 +25,28 @@ export const useGameState = () => {
 
   const dismissToast = useCallback(() => setToast(null), []);
 
-  const appendLog = useCallback((entries: BattleLogEntry[]) => {
-    if (entries.length === 0) return;
-    setGameState(prev => ({ ...prev, battleLog: [...prev.battleLog, ...entries].slice(-60) }));
-  }, []);
-
   const resetGame = useCallback(() => {
-    clearSave();
-    setGameState(createInitialState());
-    setToast({ id: ++toastSeq, text: '新的冒险开始了。', tone: 'success' });
+    dispatch({ type: 'reset' });
   }, []);
 
-  return { gameState, setGameState, resetGame, toast, notify, dismissToast, appendLog };
+  useEffect(() => {
+    if (initialRef.current.notice) {
+      notify(initialRef.current.notice, 'info');
+      initialRef.current.notice = null;
+    }
+  }, [notify]);
+
+  useEffect(() => {
+    const feedback = store.feedback;
+    if (feedback && feedback.id !== lastFeedbackId.current) {
+      lastFeedbackId.current = feedback.id;
+      notify(feedback.text, feedback.tone);
+    }
+  }, [store.feedback, notify]);
+
+  useEffect(() => {
+    saveGame(store.state);
+  }, [store.state]);
+
+  return { gameState: store.state, dispatch, resetGame, toast, notify, dismissToast };
 };

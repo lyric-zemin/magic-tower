@@ -47,7 +47,7 @@ export const itemDefinitions: Record<ItemType, ItemDefinition> = {
   },
   bomb: {
     type: 'bomb', name: '爆裂炸弹', icon: '💣', rarity: 'common', effect: 18, price: 20,
-    description: '对房内所有怪物造成 18 点真实伤害', accent: '#FB923C'
+    description: '拾取时立即对当前房间所有怪物造成 18 点真实伤害', accent: '#FB923C'
   },
   critRing: {
     type: 'critRing', name: '鹰眼戒指', icon: '💍', rarity: 'rare', effect: 20, price: 85,
@@ -63,7 +63,7 @@ export const itemDefinitions: Record<ItemType, ItemDefinition> = {
   },
   teleportScroll: {
     type: 'teleportScroll', name: '回城卷轴', icon: '📜', rarity: 'rare', effect: 1, price: 40,
-    description: '使用后返回本层入口', accent: '#A78BFA'
+    description: '拾取时立即返回本层入口', accent: '#A78BFA'
   },
   goldBag: {
     type: 'goldBag', name: '金币袋', icon: '💰', rarity: 'common', effect: 30, price: 20,
@@ -75,7 +75,7 @@ export const itemDefinitions: Record<ItemType, ItemDefinition> = {
   },
   cursedPotion: {
     type: 'cursedPotion', name: '诅咒药剂', icon: '☠️', rarity: 'cursed', effect: 10, price: 0,
-    description: '损失 10 点生命值', accent: '#EF4444'
+    description: '拾取后损失 10 点生命值，谨慎选择', accent: '#EF4444'
   }
 };
 
@@ -83,5 +83,5 @@ export const itemTypes = Object.keys(itemDefinitions) as ItemType[];
 
 export const shopStock: ItemType[] = [
   'potion', 'hiPotion', 'key', 'sword', 'steelSword', 'shield', 'armor',
-  'attackGem', 'defenseGem', 'hpGem', 'bomb', 'critRing', 'vampireRing', 'boots', 'expScroll'
+  'attackGem', 'defenseGem', 'hpGem', 'critRing', 'vampireRing', 'boots', 'expScroll'
 ];

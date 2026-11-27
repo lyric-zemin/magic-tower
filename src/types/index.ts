@@ -158,3 +158,19 @@ export interface BattleOutcome {
   defeated: boolean;
   splitSpawn: Monster[];
 }
+
+export type FeedbackTone = 'info' | 'success' | 'danger';
+
+export type GameAction =
+  | { type: 'move'; direction: Direction }
+  | { type: 'fight'; monsterId: string }
+  | { type: 'flee'; monsterId: string }
+  | { type: 'pickup'; itemId: string }
+  | { type: 'buy'; itemType: ItemType }
+  | { type: 'reset' };
+
+export interface ActionFeedback {
+  id: number;
+  text: string;
+  tone: FeedbackTone;
+}

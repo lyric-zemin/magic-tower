@@ -1,5 +1,5 @@
 import React from 'react';
-import { monsterTemplates } from '../data/monsters';
+import { monsterElementLabels, monsterTemplates, monsterTraitNames } from '../data/monsters';
 
 interface BestiaryProps {
   unlocked: string[];
@@ -43,10 +43,11 @@ const Bestiary: React.FC<BestiaryProps> = ({ unlocked, onClose }) => {
                 {isKnown && (
                   <>
                     <p className="mt-2 text-[11px] leading-relaxed text-slate-400">{monster.description}</p>
+                    <p className="mt-1 text-[10px] text-slate-500">元素：{monsterElementLabels[monster.element]}（仅作主题标识，不参与伤害结算）</p>
                     <div className="mt-2 flex flex-wrap gap-1">
                       {monster.traits.length === 0 && <span className="rounded bg-white/5 px-1.5 py-0.5 text-[10px] text-slate-500">普通</span>}
                       {monster.traits.map(trait => (
-                        <span key={trait} className="rounded bg-rose-500/10 px-1.5 py-0.5 text-[10px] text-rose-300">{trait}</span>
+                        <span key={trait} className="rounded bg-rose-500/10 px-1.5 py-0.5 text-[10px] text-rose-300">{monsterTraitNames[trait]}</span>
                       ))}
                     </div>
                     <p className="mt-2 font-mono text-[10px] text-slate-500">HP {monster.hp} · 攻 {monster.attack} · 防 {monster.defense}</p>

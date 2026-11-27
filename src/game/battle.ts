@@ -20,6 +20,32 @@ const monsterAttackPower = (monster: Monster): number => {
   return isBerserk(monster) ? Math.ceil(base * 1.4) : base;
 };
 
+export const grantKillRewards = (player: Player, monster: Monster): { player: Player; messages: string[] } => {
+  const result = applyExp(player, monster.exp);
+  return {
+    player: { ...result.player, gold: result.player.gold + monster.gold },
+    messages: result.messages
+  };
+};
+
+export const createSplitSpawns = (monster: Monster): Monster[] => {
+  if (!monster.traits.includes('split')) return [];
+  return [0, 1].map(index => ({
+    ...monster,
+    id: `${monster.id}-echo-${index}-${Date.now()}`,
+    name: `${monster.name}残影`,
+    hp: Math.ceil(monster.maxHp * 0.25),
+    maxHp: Math.ceil(monster.maxHp * 0.25),
+    attack: Math.ceil(monster.attack * 0.6),
+    defense: Math.max(1, Math.floor(monster.defense * 0.5)),
+    exp: Math.ceil(monster.exp * 0.3),
+    gold: Math.ceil(monster.gold * 0.3),
+    traits: monster.traits.filter(trait => trait !== 'split' && trait !== 'bossPhase'),
+    phase: 1,
+    position: { x: monster.position.x + index, y: monster.position.y }
+  }));
+};
+
 export type BattleEvent =
   | { type: 'playerHit'; round: number; damage: number; critical: boolean }
   | { type: 'heal'; round: number; amount: number }
@@ -130,14 +156,42 @@ export const simulateBattleCore = (player: Player, monster: Monster, limit = 50)
 };
 
 export const previewBattle = (player: Player, monster: Monster): BattlePreview => {
-  const core = simulateBattleCore(player, monster);
-  const rounds = Math.max(1, core.round);
+  let simPlayer = player;
+  const queue: Monster[] = [monster];
+  let totalRounds = 0;
+  let totalPlayerDamage = 0;
+  let totalMonsterDamage = 0;
+  let allDefeated = true;
+  let guard = 0;
+
+  while (queue.length > 0) {
+    if (guard >= 10) {
+      allDefeated = false;
+      break;
+    }
+    guard += 1;
+    const target = queue.shift() as Monster;
+    const core = simulateBattleCore(simPlayer, target);
+    totalRounds += core.round;
+    totalPlayerDamage += core.totalPlayerDamage;
+    totalMonsterDamage += core.totalMonsterDamage;
+    simPlayer = { ...simPlayer, hp: core.hp };
+    if (!core.defeated || core.hp <= 0) {
+      allDefeated = false;
+      break;
+    }
+    const reward = grantKillRewards(simPlayer, target);
+    simPlayer = { ...reward.player, hp: core.hp };
+    queue.unshift(...createSplitSpawns(target));
+  }
+
+  const rounds = Math.max(1, totalRounds);
   return {
-    playerDamage: Math.max(1, Math.round(core.totalPlayerDamage / rounds)),
-    monsterDamage: Math.round(core.totalMonsterDamage / rounds),
+    playerDamage: Math.max(1, Math.round(totalPlayerDamage / rounds)),
+    monsterDamage: Math.round(totalMonsterDamage / rounds),
     rounds,
-    hpLoss: Math.max(0, player.hp - core.hp),
-    willWin: core.defeated && core.hp > 0
+    hpLoss: Math.max(0, player.hp - simPlayer.hp),
+    willWin: allDefeated && simPlayer.hp > 0
   };
 };
 
@@ -182,37 +236,19 @@ export const resolveBattle = (player: Player, monster: Monster, limit = 50): Bat
   const log: BattleLogEntry[] = [makeLog(0, `与 ${monster.name} 展开战斗！`, 'system')];
   appendCoreLogs(log, core.events, monster.name);
 
-  const expResult = core.defeated ? applyExp(player, monster.exp) : { player, levelsGained: 0, messages: [] as string[] };
-  expResult.messages.forEach(message => log.push(makeLog(core.round, message, 'loot')));
+  const reward = core.defeated
+    ? grantKillRewards(player, monster)
+    : { player, messages: [] as string[] };
+  reward.messages.forEach(message => log.push(makeLog(core.round, message, 'loot')));
 
-  const finalPlayer: Player = {
-    ...expResult.player,
-    hp: core.hp,
-    gold: core.defeated ? expResult.player.gold + monster.gold : expResult.player.gold
-  };
+  const finalPlayer: Player = { ...reward.player, hp: core.hp };
 
   if (core.defeated) {
     log.push(makeLog(core.round, `击败 ${monster.name}，获得 ${monster.exp} 经验与 ${monster.gold} 金币。`, 'loot'));
   }
 
-  const splitSpawn: Monster[] = [];
-  if (core.defeated && monster.traits.includes('split')) {
-    for (let index = 0; index < 2; index += 1) {
-      splitSpawn.push({
-        ...monster,
-        id: `${monster.id}-echo-${index}-${Date.now()}`,
-        name: `${monster.name}残影`,
-        hp: Math.ceil(monster.maxHp * 0.25),
-        maxHp: Math.ceil(monster.maxHp * 0.25),
-        attack: Math.ceil(monster.attack * 0.6),
-        defense: Math.max(1, Math.floor(monster.defense * 0.5)),
-        exp: Math.ceil(monster.exp * 0.3),
-        gold: Math.ceil(monster.gold * 0.3),
-        traits: monster.traits.filter(trait => trait !== 'split' && trait !== 'bossPhase'),
-        phase: 1,
-        position: { x: monster.position.x + index, y: monster.position.y }
-      });
-    }
+  const splitSpawn = core.defeated ? createSplitSpawns(monster) : [];
+  if (splitSpawn.length > 0) {
     log.push(makeLog(core.round, `${monster.name} 分裂出两个残影！`, 'system'));
   }
 
@@ -227,8 +263,8 @@ export const resolveBattle = (player: Player, monster: Monster, limit = 50): Bat
 };
 
 export const fleeBattle = (player: Player, monster: Monster): BattleOutcome => {
-  const damage = Math.max(1, Math.ceil(player.maxHp * 0.1));
-  const nextPlayer: Player = { ...player, hp: Math.max(1, player.hp - damage) };
+  const damage = Math.max(1, Math.ceil(player.hp * 0.1));
+  const nextPlayer: Player = { ...player, hp: Math.max(0, player.hp - damage) };
   return {
     player: nextPlayer,
     monster: { ...monster },

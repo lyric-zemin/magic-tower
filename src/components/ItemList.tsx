@@ -1,9 +1,12 @@
 import React from 'react';
-import type { Item, ItemRarity } from '../types/index';
+import type { Item, ItemRarity, Player } from '../types/index';
 import { itemDefinitions } from '../data/items';
+import { canPickupItem } from '../game/items';
 
 interface ItemListProps {
   items: Item[];
+  player: Player;
+  hasMonsters: boolean;
   onPickup: (itemId: string) => void;
 }
 
@@ -18,7 +21,7 @@ const rarityLabel: Record<ItemRarity, string> = {
   common: '普通', rare: '稀有', epic: '史诗', cursed: '诅咒'
 };
 
-const ItemList: React.FC<ItemListProps> = ({ items, onPickup }) => {
+const ItemList: React.FC<ItemListProps> = ({ items, player, hasMonsters, onPickup }) => {
   return (
     <div className="glass-panel p-4">
       <div className="flex items-center justify-between">
@@ -31,6 +34,7 @@ const ItemList: React.FC<ItemListProps> = ({ items, onPickup }) => {
         <div className="mt-3 grid gap-2 sm:grid-cols-2">
           {items.map(item => {
             const def = itemDefinitions[item.type];
+            const availability = canPickupItem(player, item.type, hasMonsters);
             return (
               <div key={item.id} className={`flex items-center gap-3 rounded-xl border p-3 ${rarityStyle[def.rarity]}`}>
                 <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-slate-950/60 text-xl">{def.icon}</span>
@@ -42,8 +46,16 @@ const ItemList: React.FC<ItemListProps> = ({ items, onPickup }) => {
                     </span>
                   </div>
                   <p className="mt-0.5 truncate text-[11px] text-slate-400">{def.description}</p>
+                  {!availability.allowed && (
+                    <p className="mt-0.5 text-[10px] text-amber-300/80">{availability.reason}</p>
+                  )}
                 </div>
-                <button className="action-button shrink-0 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400"
+                <button
+                  disabled={!availability.allowed}
+                  title={availability.reason}
+                  className={`action-button shrink-0 ${availability.allowed
+                    ? 'bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400'
+                    : 'cursor-not-allowed bg-white/5 text-slate-500'}`}
                   onClick={() => onPickup(item.id)}>
                   拾取
                 </button>

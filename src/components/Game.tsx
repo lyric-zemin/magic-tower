@@ -1,11 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { Direction, ItemType, Room } from '../types/index';
 import { useGameState } from '../hooks/useGameState';
 import { FLOOR_NAMES } from '../data/gameData';
-import { monsterById } from '../data/monsters';
-import { makeBattleLog } from '../game/log';
-import { resolveBattle, fleeBattle } from '../game/battle';
-import { applyItem, canAfford, purchasePrice } from '../game/items';
 import PlayerStats from './PlayerStats';
 import RoomDescription from './RoomDescription';
 import MonsterList from './MonsterList';
@@ -18,143 +14,18 @@ import Bestiary from './Bestiary';
 import Toast from './Toast';
 
 const Game: React.FC = () => {
-  const { gameState, setGameState, resetGame, toast, notify, dismissToast, appendLog } = useGameState();
+  const { gameState, dispatch, resetGame, toast, dismissToast } = useGameState();
   const [shopOpen, setShopOpen] = useState(false);
   const [bestiaryOpen, setBestiaryOpen] = useState(false);
 
   const currentRoom: Room = gameState.rooms[gameState.currentRoomId];
   const floorRooms = Object.values(gameState.rooms).filter(room => room.floor === currentRoom.floor);
 
-  const explore = (ids: string[], roomId: string) => ids.includes(roomId) ? ids : [...ids, roomId];
-
-  const handleMove = (direction: Direction) => {
-    if (gameState.gameOver) return;
-    if (currentRoom.monsters.length > 0) {
-      notify('击败当前房间的所有怪物后才能离开。', 'danger');
-      return;
-    }
-    const nextId = currentRoom.exits[direction];
-    if (!nextId) return;
-    const nextRoom = gameState.rooms[nextId];
-    const needsUnlock = Boolean(nextRoom.requiresKey) && !gameState.unlockedRoomIds.includes(nextId);
-    if (needsUnlock && gameState.player.keys <= 0) {
-      notify('这扇门需要一把钥匙。', 'danger');
-      return;
-    }
-    setGameState(prev => ({
-      ...prev,
-      currentRoomId: nextId,
-      exploredRoomIds: explore(prev.exploredRoomIds, nextId),
-      unlockedRoomIds: needsUnlock ? explore(prev.unlockedRoomIds, nextId) : prev.unlockedRoomIds,
-      player: { ...prev.player, keys: needsUnlock ? prev.player.keys - 1 : prev.player.keys }
-    }));
-    notify(`进入 ${nextRoom.name}`);
-  };
-
-  const handleFight = (monsterId: string) => {
-    if (gameState.gameOver) return;
-    const monster = currentRoom.monsters.find(item => item.id === monsterId);
-    if (!monster) return;
-    const outcome = resolveBattle(gameState.player, monster);
-    const remaining = currentRoom.monsters.filter(item => item.id !== monsterId).concat(outcome.splitSpawn);
-    const unlocked = outcome.defeated && monsterById[monster.id]
-      ? Array.from(new Set([...gameState.bestiary, monster.id]))
-      : gameState.bestiary;
-    const won = outcome.defeated && currentRoom.kind === 'victory' && remaining.length === 0;
-
-    appendLog(outcome.log);
-    setGameState(prev => ({
-      ...prev,
-      rooms: { ...prev.rooms, [prev.currentRoomId]: { ...currentRoom, monsters: remaining } },
-      player: outcome.player,
-      bestiary: unlocked,
-      gameOver: outcome.player.hp <= 0 || won,
-      victory: won
-    }));
-    notify(outcome.defeated ? `击败 ${monster.name}！` : '你受伤了，先撤退补给吧。', outcome.defeated ? 'success' : 'danger');
-  };
-
-  const handleFlee = (monsterId: string) => {
-    const monster = currentRoom.monsters.find(item => item.id === monsterId);
-    if (!monster) return;
-    const outcome = fleeBattle(gameState.player, monster);
-    appendLog(outcome.log);
-    setGameState(prev => ({ ...prev, player: outcome.player }));
-    notify('成功脱离战斗。');
-  };
-
-  const handlePickup = (itemId: string) => {
-    const item = currentRoom.items.find(entry => entry.id === itemId);
-    if (!item) return;
-    const result = applyItem(gameState.player, item.type);
-    let monsters = currentRoom.monsters;
-    let bestiary = gameState.bestiary;
-    let currentRoomId = gameState.currentRoomId;
-    let exploredRoomIds = gameState.exploredRoomIds;
-
-    if (result.bombDamage > 0) {
-      monsters = monsters
-        .map(monster => ({ ...monster, hp: Math.max(0, monster.hp - result.bombDamage) }))
-        .filter(monster => {
-          if (monster.hp > 0) return true;
-          if (monsterById[monster.id]) bestiary = Array.from(new Set([...bestiary, monster.id]));
-          return false;
-        });
-      appendLog([makeBattleLog(0, result.message, 'loot')]);
-    } else {
-      appendLog([makeBattleLog(0, `拾取 ${item.name}：${result.message}`, 'loot')]);
-    }
-
-    if (result.teleport) {
-      const entrance = floorRooms.find(room => room.kind === 'start');
-      if (entrance) {
-        currentRoomId = entrance.id;
-        exploredRoomIds = explore(exploredRoomIds, entrance.id);
-      }
-    }
-
-    setGameState(prev => ({
-      ...prev,
-      currentRoomId,
-      exploredRoomIds,
-      bestiary,
-      player: result.player,
-      rooms: {
-        ...prev.rooms,
-        [gameState.currentRoomId]: {
-          ...prev.rooms[gameState.currentRoomId],
-          items: prev.rooms[gameState.currentRoomId].items.filter(entry => entry.id !== itemId),
-          monsters
-        }
-      }
-    }));
-    notify(result.message, item.type === 'cursedPotion' ? 'danger' : 'success');
-  };
-
-  const handleBuy = (type: ItemType) => {
-    if (!canAfford(gameState.player, type)) {
-      notify('金币不足。', 'danger');
-      return;
-    }
-    const result = applyItem(gameState.player, type);
-    const stock = [...(currentRoom.shopStock ?? [])];
-    const index = stock.indexOf(type);
-    if (index >= 0) stock.splice(index, 1);
-    setGameState(prev => ({
-      ...prev,
-      player: { ...result.player, gold: result.player.gold - purchasePrice(type) },
-      rooms: {
-        ...prev.rooms,
-        [prev.currentRoomId]: { ...prev.rooms[prev.currentRoomId], shopStock: stock }
-      }
-    }));
-    notify(`购买成功：${result.message}`, 'success');
-  };
-
-  const handlersRef = useRef({ handleMove, handleFight, handlePickup });
-  useEffect(() => {
-    handlersRef.current = { handleMove, handleFight, handlePickup };
-  });
+  const handleMove = (direction: Direction) => dispatch({ type: 'move', direction });
+  const handleFight = (monsterId: string) => dispatch({ type: 'fight', monsterId });
+  const handleFlee = (monsterId: string) => dispatch({ type: 'flee', monsterId });
+  const handlePickup = (itemId: string) => dispatch({ type: 'pickup', itemId });
+  const handleBuy = (type: ItemType) => dispatch({ type: 'buy', itemType: type });
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -167,21 +38,21 @@ const Game: React.FC = () => {
       const direction = keyMap[event.key];
       if (direction) {
         event.preventDefault();
-        handlersRef.current.handleMove(direction);
+        dispatch({ type: 'move', direction });
         return;
       }
       if (event.key === 'f' || event.key === 'F') {
-        if (currentRoom.monsters[0]) handlersRef.current.handleFight(currentRoom.monsters[0].id);
+        if (currentRoom.monsters[0]) dispatch({ type: 'fight', monsterId: currentRoom.monsters[0].id });
       }
       if (event.key === 'r' || event.key === 'R') {
-        if (currentRoom.items[0]) handlersRef.current.handlePickup(currentRoom.items[0].id);
+        if (currentRoom.items[0]) dispatch({ type: 'pickup', itemId: currentRoom.items[0].id });
       }
       if (event.key === 'b' || event.key === 'B') setShopOpen(value => !value);
       if (event.key === 'c' || event.key === 'C') setBestiaryOpen(value => !value);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [shopOpen, bestiaryOpen, gameState.gameOver, currentRoom]);
+  }, [shopOpen, bestiaryOpen, gameState.gameOver, currentRoom, dispatch]);
 
   const blocked = currentRoom.monsters.length > 0;
 
@@ -217,7 +88,12 @@ const Game: React.FC = () => {
           <section className="min-w-0 space-y-4">
             <RoomDescription room={currentRoom} canLeave={!blocked} />
             <MonsterList monsters={currentRoom.monsters} player={gameState.player} onFight={handleFight} onFlee={handleFlee} />
-            <ItemList items={currentRoom.items} onPickup={handlePickup} />
+            <ItemList
+              items={currentRoom.items}
+              player={gameState.player}
+              hasMonsters={blocked}
+              onPickup={handlePickup}
+            />
             <div className="hidden md:block">
               <Controls exits={currentRoom.exits} onMove={handleMove} blocked={blocked} />
             </div>
