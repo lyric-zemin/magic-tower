@@ -36,7 +36,8 @@ const Game: React.FC = () => {
     const nextId = currentRoom.exits[direction];
     if (!nextId) return;
     const nextRoom = gameState.rooms[nextId];
-    if (nextRoom.requiresKey && gameState.player.keys <= 0) {
+    const needsUnlock = Boolean(nextRoom.requiresKey) && !gameState.unlockedRoomIds.includes(nextId);
+    if (needsUnlock && gameState.player.keys <= 0) {
       notify('这扇门需要一把钥匙。', 'danger');
       return;
     }
@@ -44,7 +45,8 @@ const Game: React.FC = () => {
       ...prev,
       currentRoomId: nextId,
       exploredRoomIds: explore(prev.exploredRoomIds, nextId),
-      player: { ...prev.player, keys: nextRoom.requiresKey ? prev.player.keys - 1 : prev.player.keys }
+      unlockedRoomIds: needsUnlock ? explore(prev.unlockedRoomIds, nextId) : prev.unlockedRoomIds,
+      player: { ...prev.player, keys: needsUnlock ? prev.player.keys - 1 : prev.player.keys }
     }));
     notify(`进入 ${nextRoom.name}`);
   };

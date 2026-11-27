@@ -20,31 +20,37 @@ const monsterAttackPower = (monster: Monster): number => {
   return isBerserk(monster) ? Math.ceil(base * 1.4) : base;
 };
 
-export const previewBattle = (player: Player, monster: Monster): BattlePreview => {
-  const playerDamage = Math.max(1, player.attack - monster.defense - armoredReduction(monster));
-  const critBonus = hasRelic(player, 'critRing') ? playerDamage * 0.2 : 0;
-  const effectiveDamage = playerDamage + critBonus;
-  const monsterDamage = Math.max(1, monsterAttackPower(monster) - player.defense) *
-    (monster.traits.includes('doubleStrike') ? 2 : 1);
-  const rounds = Math.max(1, Math.ceil(monster.hp / effectiveDamage));
-  const hpLoss = Math.max(0, (rounds - 1) * monsterDamage);
-  return {
-    playerDamage: Math.round(effectiveDamage),
-    monsterDamage,
-    rounds,
-    hpLoss,
-    willWin: player.hp > hpLoss
-  };
-};
+export type BattleEvent =
+  | { type: 'playerHit'; round: number; damage: number; critical: boolean }
+  | { type: 'heal'; round: number; amount: number }
+  | { type: 'phase'; round: number }
+  | { type: 'monsterHit'; round: number; strike: number; strikes: number; damage: number; critical: boolean }
+  | { type: 'poison'; round: number; amount: number }
+  | { type: 'lifesteal'; round: number; amount: number }
+  | { type: 'curse'; round: number }
+  | { type: 'death'; round: number }
+  | { type: 'retreat'; round: number };
 
-export const resolveBattle = (player: Player, monster: Monster, limit = 50): BattleOutcome => {
-  const log: BattleLogEntry[] = [makeLog(0, `与 ${monster.name} 展开战斗！`, 'system')];
+export interface BattleCoreResult {
+  hp: number;
+  monsterHp: number;
+  phase: number;
+  round: number;
+  defeated: boolean;
+  totalPlayerDamage: number;
+  totalMonsterDamage: number;
+  events: BattleEvent[];
+}
+
+export const simulateBattleCore = (player: Player, monster: Monster, limit = 50): BattleCoreResult => {
   let hp = player.hp;
   let monsterHp = monster.hp;
   let phase = monster.phase;
   let cursePenalty = 0;
-  let defeated = false;
   let round = 0;
+  let totalPlayerDamage = 0;
+  let totalMonsterDamage = 0;
+  const events: BattleEvent[] = [];
 
   const currentMonster = (): Monster => ({ ...monster, hp: monsterHp, phase });
 
@@ -55,26 +61,22 @@ export const resolveBattle = (player: Player, monster: Monster, limit = 50): Bat
     const baseDamage = Math.max(1, player.attack - cursePenalty - activeMonster.defense - armoredReduction(activeMonster));
     const playerDamage = crit ? Math.ceil(baseDamage * 1.8) : baseDamage;
     monsterHp -= playerDamage;
-    log.push(makeLog(round, crit
-      ? `暴击！你对 ${monster.name} 造成 ${playerDamage} 点伤害。`
-      : `你对 ${monster.name} 造成 ${playerDamage} 点伤害。`, crit ? 'critical' : 'player'));
+    totalPlayerDamage += playerDamage;
+    events.push({ type: 'playerHit', round, damage: playerDamage, critical: crit });
 
     if (hasRelic(player, 'vampireRing')) {
       const healed = Math.min(player.maxHp - hp, Math.floor(playerDamage * 0.25));
       if (healed > 0) {
         hp += healed;
-        log.push(makeLog(round, `血契戒指汲取 ${healed} 点生命。`, 'heal'));
+        events.push({ type: 'heal', round, amount: healed });
       }
     }
 
-    if (monsterHp <= 0) {
-      defeated = true;
-      break;
-    }
+    if (monsterHp <= 0) break;
 
     if (monster.traits.includes('bossPhase') && phase === 1 && monsterHp <= monster.maxHp / 2) {
       phase = 2;
-      log.push(makeLog(round, `${monster.name} 进入第二阶段，攻击与防御提升！`, 'system'));
+      events.push({ type: 'phase', round });
     }
 
     const strikes = monster.traits.includes('doubleStrike') ? 2 : 1;
@@ -84,49 +86,117 @@ export const resolveBattle = (player: Player, monster: Monster, limit = 50): Bat
       const monsterCrit = monster.traits.includes('critical') && round % 3 === 0;
       if (monsterCrit) damage = Math.ceil(damage * 1.6);
       hp -= damage;
-      log.push(makeLog(round, `${monster.name}${strikes > 1 ? ` 第 ${strike} 击` : ''}造成 ${damage} 点伤害${monsterCrit ? '（爆发）' : ''}。`, 'monster'));
+      totalMonsterDamage += damage;
+      events.push({ type: 'monsterHit', round, strike, strikes, damage, critical: monsterCrit });
 
       if (monster.traits.includes('poison') && round % 2 === 0) {
         hp -= 3;
-        log.push(makeLog(round, '毒素侵蚀，额外损失 3 点生命。', 'monster'));
+        totalMonsterDamage += 3;
+        events.push({ type: 'poison', round, amount: 3 });
       }
       if (monster.traits.includes('lifesteal')) {
         const healed = Math.min(monster.maxHp - monsterHp, Math.floor(damage * 0.3));
         if (healed > 0) {
           monsterHp += healed;
-          log.push(makeLog(round, `${monster.name} 吸取 ${healed} 点生命。`, 'system'));
+          events.push({ type: 'lifesteal', round, amount: healed });
         }
       }
       if (monster.traits.includes('curse') && cursePenalty < 5) {
         cursePenalty += 1;
-        log.push(makeLog(round, '诅咒缠身，本场战斗中攻击力下降。', 'monster'));
+        events.push({ type: 'curse', round });
       }
     }
   }
 
+  const defeated = monsterHp <= 0;
   if (hp <= 0) {
     hp = 0;
-    log.push(makeLog(round, '你倒在了血泊之中……', 'system'));
+    events.push({ type: 'death', round });
   }
   if (round >= limit && monsterHp > 0) {
-    log.push(makeLog(round, '战斗过于胶着，你被迫撤退。', 'system'));
+    events.push({ type: 'retreat', round });
   }
 
-  const expResult = defeated ? applyExp(player, monster.exp) : { player, levelsGained: 0, messages: [] as string[] };
-  expResult.messages.forEach(message => log.push(makeLog(round, message, 'loot')));
+  return {
+    hp,
+    monsterHp,
+    phase,
+    round,
+    defeated,
+    totalPlayerDamage,
+    totalMonsterDamage,
+    events
+  };
+};
+
+export const previewBattle = (player: Player, monster: Monster): BattlePreview => {
+  const core = simulateBattleCore(player, monster);
+  const rounds = Math.max(1, core.round);
+  return {
+    playerDamage: Math.max(1, Math.round(core.totalPlayerDamage / rounds)),
+    monsterDamage: Math.round(core.totalMonsterDamage / rounds),
+    rounds,
+    hpLoss: Math.max(0, player.hp - core.hp),
+    willWin: core.defeated && core.hp > 0
+  };
+};
+
+const appendCoreLogs = (log: BattleLogEntry[], events: BattleEvent[], monsterName: string): void => {
+  events.forEach(event => {
+    switch (event.type) {
+      case 'playerHit':
+        log.push(makeLog(event.round, event.critical
+          ? `暴击！你对 ${monsterName} 造成 ${event.damage} 点伤害。`
+          : `你对 ${monsterName} 造成 ${event.damage} 点伤害。`, event.critical ? 'critical' : 'player'));
+        break;
+      case 'heal':
+        log.push(makeLog(event.round, `血契戒指汲取 ${event.amount} 点生命。`, 'heal'));
+        break;
+      case 'phase':
+        log.push(makeLog(event.round, `${monsterName} 进入第二阶段，攻击大幅提升！`, 'system'));
+        break;
+      case 'monsterHit':
+        log.push(makeLog(event.round, `${monsterName}${event.strikes > 1 ? ` 第 ${event.strike} 击` : ''}造成 ${event.damage} 点伤害${event.critical ? '（爆发）' : ''}。`, 'monster'));
+        break;
+      case 'poison':
+        log.push(makeLog(event.round, `毒素侵蚀，额外损失 ${event.amount} 点生命。`, 'monster'));
+        break;
+      case 'lifesteal':
+        log.push(makeLog(event.round, `${monsterName} 吸取 ${event.amount} 点生命。`, 'system'));
+        break;
+      case 'curse':
+        log.push(makeLog(event.round, '诅咒缠身，本场战斗中攻击力下降。', 'monster'));
+        break;
+      case 'death':
+        log.push(makeLog(event.round, '你倒在了血泊之中……', 'system'));
+        break;
+      case 'retreat':
+        log.push(makeLog(event.round, '战斗过于胶着，你被迫撤退。', 'system'));
+        break;
+    }
+  });
+};
+
+export const resolveBattle = (player: Player, monster: Monster, limit = 50): BattleOutcome => {
+  const core = simulateBattleCore(player, monster, limit);
+  const log: BattleLogEntry[] = [makeLog(0, `与 ${monster.name} 展开战斗！`, 'system')];
+  appendCoreLogs(log, core.events, monster.name);
+
+  const expResult = core.defeated ? applyExp(player, monster.exp) : { player, levelsGained: 0, messages: [] as string[] };
+  expResult.messages.forEach(message => log.push(makeLog(core.round, message, 'loot')));
 
   const finalPlayer: Player = {
     ...expResult.player,
-    hp,
-    gold: defeated ? expResult.player.gold + monster.gold : expResult.player.gold
+    hp: core.hp,
+    gold: core.defeated ? expResult.player.gold + monster.gold : expResult.player.gold
   };
 
-  if (defeated) {
-    log.push(makeLog(round, `击败 ${monster.name}，获得 ${monster.exp} 经验与 ${monster.gold} 金币。`, 'loot'));
+  if (core.defeated) {
+    log.push(makeLog(core.round, `击败 ${monster.name}，获得 ${monster.exp} 经验与 ${monster.gold} 金币。`, 'loot'));
   }
 
   const splitSpawn: Monster[] = [];
-  if (defeated && monster.traits.includes('split')) {
+  if (core.defeated && monster.traits.includes('split')) {
     for (let index = 0; index < 2; index += 1) {
       splitSpawn.push({
         ...monster,
@@ -143,15 +213,15 @@ export const resolveBattle = (player: Player, monster: Monster, limit = 50): Bat
         position: { x: monster.position.x + index, y: monster.position.y }
       });
     }
-    log.push(makeLog(round, `${monster.name} 分裂出两个残影！`, 'system'));
+    log.push(makeLog(core.round, `${monster.name} 分裂出两个残影！`, 'system'));
   }
 
   return {
     player: finalPlayer,
-    monster: defeated ? null : { ...monster, hp: Math.max(0, monsterHp), phase },
+    monster: core.defeated ? null : { ...monster, hp: Math.max(0, core.monsterHp), phase: core.phase },
     log,
     escaped: false,
-    defeated,
+    defeated: core.defeated,
     splitSpawn
   };
 };

@@ -73,7 +73,6 @@ export interface MonsterTemplate {
   gold: number;
   threat: number;
   description: string;
-  drops: ItemType[];
 }
 
 export interface Monster extends MonsterTemplate {
@@ -138,6 +137,7 @@ export interface GameState {
   gameOver: boolean;
   victory: boolean;
   exploredRoomIds: string[];
+  unlockedRoomIds: string[];
   bestiary: string[];
   battleLog: BattleLogEntry[];
 }
